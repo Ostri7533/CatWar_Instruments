@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CatWar Safe Downloader</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #2c3e50, #34495e);
+            color: white;
+            padding: 25px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 16px;
+        }
+        
+        .content {
+            padding: 25px;
+        }
+        
+        .tab-buttons {
+            display: flex;
+            margin-bottom: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 5px;
+        }
+        
+        .tab-button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .tab-button.active {
+            background: #3498db;
+            color: white;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        textarea, input, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+        
+        textarea {
+            height: 150px;
+            resize: vertical;
+            font-family: monospace;
+        }
+        
+        textarea:focus, input:focus, select:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 10px;
+        }
+        
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .settings-row {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .settings-row > div {
+            flex: 1;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            border: none;
+            padding: 15px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.4);
+        }
+        
+        .btn:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+        }
+        
+        .progress-container {
+            margin-top: 25px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            display: none;
+        }
+        
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        
+        .progress-bar {
+            height: 10px;
+            background: #e9ecef;
+            border-radius: 5px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #2ecc71, #27ae60);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .log {
+            height: 200px;
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            margin-top: 15px;
+        }
+        
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 3px 0;
+        }
+        
+        .log-success { color: #2ecc71; }
+        .log-error { color: #e74c3c; }
+        .log-warning { color: #f39c12; }
+        .log-info { color: #3498db; }
+        
+        .safety-features {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .feature-list {
+            list-style: none;
+            margin-top: 10px;
+        }
+        
+        .feature-list li {
+            padding: 5px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .feature-list li::before {
+            content: "✅";
+        }
+        
+        .preset-buttons {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .preset-btn {
+            padding: 10px;
+            border: 2px solid #3498db;
+            background: white;
+            color: #3498db;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .preset-btn:hover {
+            background: #3498db;
+            color: white;
+        }
+
+        .download-info {
+            background: #e8f5e8;
+            border: 1px solid #2ecc71;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🐱 CatWar Safe Downloader</h1>
+            <p>Безопасное скачивание изображений с защитой от перегрузки</p>
+        </div>
+        
+        <div class="content">
+            <div class="tab-buttons">
+                <button class="tab-button active" onclick="switchTab('bbcode')">BB-коды</button>
+                <button class="tab-button" onclick="switchTab('generator')">Генератор ссылок</button>
+                <button class="tab-button" onclick="switchTab('mass')">Массовая загрузка</button>
+            </div>
+            
+            <div class="safety-features">
+                <strong>🛡️ Защитные механизмы:</strong>
+                <ul class="feature-list">
+                    <li>Ограничение: 30 файлов за раз</li>
+                    <li>Автоматические паузы между скачиваниями</li>
+                    <li>Скачивание через Blob (без перехода по ссылкам)</li>
+                    <li>Контроль памяти и нагрузки</li>
+                    <li>Возможность остановки в любой момент</li>
+                </ul>
+            </div>
+            
+            <!-- TAB 1: BB-CODE -->
+            <div id="bbcode" class="tab-content active">
+                <div class="form-group">
+                    <label>Вставьте BB-коды с [img]ссылками[/img]:</label>
+                    <textarea id="bbcodeInput" placeholder="[img]https://catwar.net/cw3/cats/0/costume/6823.png[/img]
+[img]https://catwar.net/cw3/odoroj/1.png[/img]
+..."></textarea>
+                </div>
+                
+                <div class="settings-row">
+                    <div>
+                        <label>Задержка между файлами (мс):</label>
+                        <input type="number" id="delay1" value="1500" min="500" max="5000">
+                    </div>
+                    <div>
+                        <label>Лимит файлов:</label>
+                        <input type="number" id="limit1" value="20" min="1" max="30">
+                    </div>
+                </div>
+                
+                <button class="btn" onclick="parseAndDownloadBBCode()">📥 Начать безопасное скачивание</button>
+            </div>
+            
+            <!-- TAB 2: GENERATOR -->
+            <div id="generator" class="tab-content">
+                <div class="form-group">
+                    <label>Тип контента:</label>
+                    <select id="contentType">
+                        <option value="costume">Костюмы (costume)</option>
+                        <option value="odoroj">Запахи (odoroj)</option>
+                        <option value="actions">Достижения (actions)</option>
+                        <option value="medal">Медали (medal)</option>
+                        <option value="spacoj">Фоны (spacoj)</option>
+                        <option value="things">Предметы (things)</option>
+                    </select>
+                </div>
+                
+                <div class="settings-row">
+                    <div>
+                        <label>ID от:</label>
+                        <input type="number" id="startId" value="6823">
+                    </div>
+                    <div>
+                        <label>ID до:</label>
+                        <input type="number" id="endId" value="6863">
+                    </div>
+                </div>
+                
+                <div class="form-group" id="costumeVersionsContainer">
+                    <label>Версии костюмов:</label>
+                    <div class="checkbox-group">
+                        <label class="checkbox-item"><input type="checkbox" name="version" value="0" checked> 0</label>
+                        <label class="checkbox-item"><input type="checkbox" name="version" value="1"> 1</label>
+                        <label class="checkbox-item"><input type="checkbox" name="version" value="-1"> -1</label>
+                        <label class="checkbox-item"><input type="checkbox" name="version" value="5"> 5</label>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Дополнительные ID (через запятую):</label>
+                    <input type="text" id="additionalIds" placeholder="6872, 6895">
+                </div>
+                
+                <button class="btn" onclick="generateAndDownload()">🎯 Сгенерировать и скачать</button>
+            </div>
+            
+            <!-- TAB 3: MASS DOWNLOAD -->
+            <div id="mass" class="tab-content">
+                <div class="preset-buttons">
+                    <button class="preset-btn" onclick="loadPreset('costumes')">🎭 Костюмы</button>
+                    <button class="preset-btn" onclick="loadPreset('odors')">👃 Запахи</button>
+                    <button class="preset-btn" onclick="loadPreset('achievements')">🏆 Достижения</button>
+                    <button class="preset-btn" onclick="loadPreset('items')">🎒 Предметы</button>
+                </div>
+                
+                <div class="form-group">
+                    <label>Ссылки для скачивания (по одной на строку):</label>
+                    <textarea id="massUrls" placeholder="https://catwar.net/cw3/cats/0/costume/6823.png
+https://catwar.net/cw3/odoroj/1.png
+..."></textarea>
+                </div>
+                
+                <div class="settings-row">
+                    <div>
+                        <label>Задержка (мс):</label>
+                        <input type="number" id="massDelay" value="1200" min="500">
+                    </div>
+                    <div>
+                        <label>Максимум файлов:</label>
+                        <input type="number" id="massLimit" value="15" min="1" max="30">
+                    </div>
+                </div>
+                
+                <button class="btn" onclick="downloadMassUrls()">🚀 Массовое скачивание</button>
+            </div>
+            
+            <!-- PROGRESS SECTION -->
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-header">
+                    <div>
+                        <strong>Статус:</strong> <span id="statusText">Ожидание...</span>
+                    </div>
+                    <div>
+                        <span id="progressText">0/0</span>
+                    </div>
+                </div>
+                
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                
+                <button class="btn btn-danger" onclick="stopDownload()" id="stopBtn">⏹️ Остановить</button>
+                
+                <div class="log" id="logContainer"></div>
+
+                <div class="download-info" id="downloadInfo">
+                    <strong>💡 Скачивание началось!</strong>
+                    <p>Файлы сохраняются в папку "Загрузки". Проверьте папку загрузок вашего браузера.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State management
+        let downloadQueue = [];
+        let isDownloading = false;
+        let currentIndex = 0;
+        let totalFiles = 0;
+        let abortController = null;
+        
+        // Tab switching
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+            
+            // Show/hide costume versions based on content type
+            if (tabName === 'generator') {
+                const type = document.getElementById('contentType').value;
+                document.getElementById('costumeVersionsContainer').style.display = 
+                    type === 'costume' ? 'block' : 'none';
+            }
+        }
+        
+        // Content type change handler
+        document.getElementById('contentType').addEventListener('change', function() {
+            document.getElementById('costumeVersionsContainer').style.display = 
+                this.value === 'costume' ? 'block' : 'none';
+        });
+        
+        // Preset loader
+        function loadPreset(presetName) {
+            const presets = {
+                costumes: `https://catwar.net/cw3/cats/0/costume/6823.png\nhttps://catwar.net/cw3/cats/0/costume/6824.png\nhttps://catwar.net/cw3/cats/0/costume/6825.png`,
+                odors: `https://catwar.net/cw3/odoroj/1.png\nhttps://catwar.net/cw3/odoroj/2.png\nhttps://catwar.net/cw3/odoroj/3.png`,
+                achievements: `https://catwar.net/cw3/actions/1.png\nhttps://catwar.net/cw3/actions/2.png\nhttps://catwar.net/cw3/actions/3.png`,
+                items: `https://catwar.net/cw3/things/1.png\nhttps://catwar.net/cw3/things/2.png\nhttps://catwar.net/cw3/things/3.png`
+            };
+            
+            document.getElementById('massUrls').value = presets[presetName] || '';
+            addLog(`Загружен пресет: ${presetName}`, 'info');
+        }
+        
+        // BBCode parser
+        function parseAndDownloadBBCode() {
+            const bbcodeText = document.getElementById('bbcodeInput').value;
+            const delay = parseInt(document.getElementById('delay1').value) || 1500;
+            const limit = parseInt(document.getElementById('limit1').value) || 20;
+            
+            // Parse [img] tags
+            const imgRegex = /\[img\](.*?)\[\/img\]/g;
+            const urls = [];
+            let match;
+            
+            while ((match = imgRegex.exec(bbcodeText)) !== null && urls.length < limit) {
+                urls.push(match[1].trim());
+            }
+            
+            if (urls.length === 0) {
+                addLog('❌ Не найдено ссылок в BB-кодах', 'error');
+                return;
+            }
+            
+            startDownload(urls, delay, 'bbcode');
+        }
+        
+        // URL generator
+        function generateAndDownload() {
+            const type = document.getElementById('contentType').value;
+            const startId = parseInt(document.getElementById('startId').value) || 1;
+            const endId = parseInt(document.getElementById('endId').value) || startId + 10;
+            const additionalIds = document.getElementById('additionalIds').value
+                .split(',')
+                .map(id => parseInt(id.trim()))
+                .filter(id => !isNaN(id));
+            const delay = 1200;
+            
+            const urls = [];
+            const baseUrls = {
+                costume: 'https://catwar.net/cw3/cats/{X}/costume/',
+                odoroj: 'https://catwar.net/cw3/odoroj/',
+                actions: 'https://catwar.net/cw3/actions/',
+                medal: 'https://catwar.net/cw3/medal/',
+                spacoj: 'https://catwar.net/cw3/spacoj/',
+                things: 'https://catwar.net/cw3/things/'
+            };
+            
+            if (type === 'costume') {
+                const versions = Array.from(document.querySelectorAll('input[name="version"]:checked'))
+                    .map(input => input.value);
+                
+                versions.forEach(version => {
+                    for (let id = startId; id <= endId && urls.length < 25; id++) {
+                        urls.push(baseUrls.costume.replace('{X}', version) + id + '.png');
+                    }
+                });
+            } else {
+                for (let id = startId; id <= endId && urls.length < 25; id++) {
+                    urls.push(baseUrls[type] + id + '.png');
+                }
+            }
+            
+            // Add additional IDs
+            additionalIds.forEach(id => {
+                if (type === 'costume') {
+                    const versions = Array.from(document.querySelectorAll('input[name="version"]:checked'))
+                        .map(input => input.value);
+                    versions.forEach(version => {
+                        urls.push(baseUrls.costume.replace('{X}', version) + id + '.png');
+                    });
+                } else {
+                    urls.push(baseUrls[type] + id + '.png');
+                }
+            });
+            
+            // Remove duplicates and limit
+            const uniqueUrls = [...new Set(urls)].slice(0, 30);
+            
+            startDownload(uniqueUrls, delay, 'generator');
+        }
+        
+        // Mass downloader
+        function downloadMassUrls() {
+            const urlsText = document.getElementById('massUrls').value;
+            const delay = parseInt(document.getElementById('massDelay').value) || 1200;
+            const limit = parseInt(document.getElementById('massLimit').value) || 15;
+            
+            const urls = urlsText.split('\n')
+                .map(url => url.trim())
+                .filter(url => url && url.startsWith('http'))
+                .slice(0, limit);
+            
+            if (urls.length === 0) {
+                addLog('❌ Нет валидных ссылок для скачивания', 'error');
+                return;
+            }
+            
+            startDownload(urls, delay, 'mass');
+        }
+        
+        // Main download controller - ИСПРАВЛЕННАЯ ВЕРСИЯ
+        function startDownload(urls, delay, source) {
+            if (isDownloading) {
+                addLog('⚠️ Скачивание уже запущено', 'warning');
+                return;
+            }
+            
+            // Safety limits
+            if (urls.length > 30) {
+                urls = urls.slice(0, 30);
+                addLog(`⚠️ Ограничение: скачаем первые 30 файлов`, 'warning');
+            }
+            
+            downloadQueue = urls;
+            totalFiles = urls.length;
+            currentIndex = 0;
+            isDownloading = true;
+            abortController = new AbortController();
+            
+            // UI setup
+            document.getElementById('progressContainer').style.display = 'block';
+            document.getElementById('downloadInfo').style.display = 'block';
+            document.getElementById('progressText').textContent = `0/${totalFiles}`;
+            document.getElementById('progressFill').style.width = '0%';
+            document.getElementById('statusText').textContent = 'Подготовка...';
+            document.getElementById('stopBtn').disabled = false;
+            
+            addLog(`🚀 Начало скачивания ${totalFiles} файлов`, 'info');
+            addLog(`⏱️ Задержка: ${delay}мс между файлами`, 'info');
+            addLog(`💾 Скачивание через Blob (без перехода по ссылкам)`, 'info');
+            
+            // Start download process
+            processDownloadQueue(delay);
+        }
+        
+        // Queue processor with BLOB download - ИСПРАВЛЕННАЯ ВЕРСИЯ
+        async function processDownloadQueue(delay) {
+            if (!isDownloading || currentIndex >= downloadQueue.length) {
+                if (currentIndex >= downloadQueue.length) {
+                    finishDownload();
+                }
+                return;
+            }
+            
+            const url = downloadQueue[currentIndex];
+            const filename = getFilenameFromUrl(url);
+            
+            // Update progress
+            const progress = ((currentIndex + 1) / totalFiles) * 100;
+            document.getElementById('progressFill').style.width = progress + '%';
+            document.getElementById('progressText').textContent = `${currentIndex + 1}/${totalFiles}`;
+            document.getElementById('statusText').textContent = `Скачивание: ${filename}`;
+            
+            try {
+                // Download via fetch and Blob - ЭТО ИСПРАВЛЕНИЕ
+                addLog(`📥 Загрузка: ${filename}`, 'info');
+                
+                const response = await fetch(url, {
+                    signal: abortController.signal,
+                    headers: {
+                        'Accept': 'image/*',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const blob = await response.blob();
+                
+                if (blob.size === 0) {
+                    throw new Error('Пустой файл');
+                }
+                
+                // Create download link
+                const blobUrl = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = blobUrl;
+                link.download = filename;
+                link.style.display = 'none';
+                
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                // Clean up
+                setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+                
+                addLog(`✅ [${currentIndex + 1}/${totalFiles}] ${filename} (${formatFileSize(blob.size)})`, 'success');
+                
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    addLog(`⏹️ Остановлено: ${filename}`, 'warning');
+                    return;
+                }
+                addLog(`❌ Ошибка: ${filename} - ${error.message}`, 'error');
+            }
+            
+            currentIndex++;
+            
+            // Safety: check if we should continue
+            if (currentIndex < downloadQueue.length && isDownloading) {
+                // Add random variation to delay to avoid patterns
+                const variedDelay = delay + Math.random() * 200 - 100;
+                setTimeout(() => processDownloadQueue(delay), variedDelay);
+            } else {
+                finishDownload();
+            }
+        }
+        
+        // Finish download process
+        function finishDownload() {
+            isDownloading = false;
+            const downloadedCount = currentIndex;
+            
+            if (downloadedCount > 0) {
+                document.getElementById('statusText').textContent = `Завершено! Скачано: ${downloadedCount}/${totalFiles}`;
+                addLog(`🎉 Скачивание завершено! Успешно: ${downloadedCount}/${totalFiles}`, 'success');
+            } else {
+                document.getElementById('statusText').textContent = 'Скачивание отменено';
+            }
+            
+            document.getElementById('stopBtn').disabled = true;
+            
+            // Clean up
+            if (abortController) {
+                abortController = null;
+            }
+        }
+        
+        // Stop download
+        function stopDownload() {
+            isDownloading = false;
+            if (abortController) {
+                abortController.abort();
+            }
+            addLog('⏹️ Скачивание остановлено пользователем', 'warning');
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('statusText').textContent = 'Остановлено пользователем';
+        }
+        
+        // Utility functions
+        function getFilenameFromUrl(url) {
+            const matches = url.match(/\/([^\/]+\.(png|jpg|jpeg|gif))$/);
+            if (matches) return matches[1];
+            
+            // Generate filename from URL pattern
+            if (url.includes('/costume/')) {
+                const idMatch = url.match(/costume\/(\d+)\./);
+                return idMatch ? `costume_${idMatch[1]}.png` : 'costume.png';
+            }
+            if (url.includes('/odoroj/')) return 'odor.png';
+            if (url.includes('/actions/')) return 'achievement.png';
+            if (url.includes('/medal/')) return 'medal.png';
+            if (url.includes('/spacoj/')) return 'background.png';
+            if (url.includes('/things/')) return 'item.png';
+            
+            return `file_${currentIndex + 1}.png`;
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        function addLog(message, type = 'info') {
+            const logContainer = document.getElementById('logContainer');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            
+            logContainer.appendChild(entry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            addLog('🔧 CatWar Safe Downloader инициализирован', 'info');
+            addLog('💡 Файлы скачиваются через Blob (без перехода по ссылкам)', 'info');
+            addLog('📁 Проверяйте папку "Загрузки" браузера', 'info');
+        });
+    </script>
+</body>
+</html>
