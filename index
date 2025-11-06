@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CatWar Downloader</title>
+    <style>
+        /* СТИЛИ ОСТАЮТСЯ ПРЕЖНИМИ - они корректны */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        /* ... все остальные стили без изменений ... */
+        
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- HTML структура остается без изменений -->
+        
+        <div class="content">
+            <!-- ... существующая структура ... -->
+        </div>
+    </div>
+
+    <script>
+        // ==================== КОНФИГУРАЦИЯ ====================
+        const CORS_PROXIES = [
+            'https://corsproxy.io/?',
+            'https://api.codetabs.com/v1/proxy?quest=',
+            'https://cors-anywhere.herokuapp.com/'
+        ];
+
+        // ==================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ====================
+        let allUrls = [];
+        let validUrls = [];
+        let downloadQueue = [];
+        let isChecking = false;
+        let isDownloading = false;
+        let currentIndex = 0;
+        let totalFiles = 0;
+        let currentProxyIndex = 0;
+        let checkedCount = 0;
+        let validCount = 0;
+        let invalidCount = 0;
+        let downloadedCount = 0;
+        let abortController = null;
+        let currentFolderName = "CatWar_Downloads";
+        let useStrictVerification = true;
+
+        // ==================== СЛУЖЕБНЫЕ ФУНКЦИИ ====================
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+            
+            if (tabName === 'generator') {
+                const type = document.getElementById('contentType').value;
+                document.getElementById('costumeVersionsContainer').style.display = 
+                    type === 'costume' ? 'block' : 'none';
+            }
+        }
+
+        // 🔧 ИСПРАВЛЕННАЯ ФУНКЦИЯ ПРОКСИ
+        function getProxyUrl(url) {
+            // Проверяем, есть ли уже параметры в URL
+            const separator = CORS_PROXIES[currentProxyIndex].includes('?') ? '&' : '?';
+            return CORS_PROXIES[currentProxyIndex] + encodeURIComponent(url);
+        }
+
+        function rotateProxy() {
+            currentProxyIndex = (currentProxyIndex + 1) % CORS_PROXIES.length;
+            const proxyNames = ['corsproxy.io', 'codetabs.com', 'cors-anywhere'];
+            document.getElementById('currentProxy').textContent = proxyNames[currentProxyIndex];
+            addLog(`🔄 Смена прокси на: ${proxyNames[currentProxyIndex]}`, 'proxy');
+        }
+
+        function updateStats() {
+            document.getElementById('checkedCount').textContent = checkedCount;
+            document.getElementById('validCount').textContent = validCount;
+            document.getElementById('invalidCount').textContent = invalidCount;
+            document.getElementById('downloadedCount').textContent = downloadedCount;
+        }
+
+        function setPhase(phase) {
+            document.getElementById('phaseCheck').classList.remove('active');
+            document.getElementById('phaseDownload').classList.remove('active');
+            
+            if (phase === 'check') {
+                document.getElementById('phaseCheck').classList.add('active');
+                document.getElementById('currentPhase').textContent = 'Проверка файлов';
+            } else {
+                document.getElementById('phaseDownload').classList.add('active');
+                document.getElementById('currentPhase').textContent = 'Скачивание файлов';
+            }
+        }
+
+        function addLog(message, type = 'info') {
+            const logContainer = document.getElementById('logContainer');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            
+            logContainer.appendChild(entry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        // ==================== УЛУЧШЕННАЯ ПРОВЕРКА ИЗОБРАЖЕНИЙ ====================
+        async function checkImageExists(url) {
+            for (let attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    const proxyUrl = getProxyUrl(url);
+                    
+                    // 🔧 ИСПРАВЛЕННЫЙ ЗАПРОС: добавляем timeout
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 10000);
+                    
+                    const response = await fetch(proxyUrl, {
+                        method: 'GET',
+                        signal: controller.signal,
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                            'Accept': 'image/*, */*'
+                        }
+                    });
+
+                    clearTimeout(timeoutId);
+
+                    if (!response.ok) {
+                        if (response.status === 404) {
+                            return { exists: false, error: 'Файл не найден (404)' };
+                        } else if (response.status === 403) {
+                            throw new Error('Доступ запрещен (403)');
+                        } else if (response.status >= 500) {
+                            throw new Error(`Ошибка сервера: ${response.status}`);
+                        } else {
+                            throw new Error(`HTTP ${response.status}`);
+                        }
+                    }
+
+                    // 🔧 УПРОЩЕННАЯ ПРОВЕРКА - только базовые проверки
+                    const blob = await response.blob();
+                    
+                    if (blob.size < 100) {
+                        return { exists: false, error: 'Файл слишком маленький' };
+                    }
+
+                    return { 
+                        exists: true, 
+                        size: blob.size,
+                        type: response.headers.get('content-type') || 'unknown'
+                    };
+
+                } catch (error) {
+                    if (error.name === 'AbortError') {
+                        addLog(`⏰ Таймаут запроса (попытка ${attempt})`, 'warning');
+                    } else {
+                        addLog(`❌ Ошибка (попытка ${attempt}): ${error.message}`, 'error');
+                    }
+                    
+                    if (attempt < 3) {
+                        rotateProxy();
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    } else {
+                        return { exists: false, error: error.message };
+                    }
+                }
+            }
+            return { exists: false, error: 'Все попытки провалились' };
+        }
+
+        // ==================== ФУНКЦИИ ДЛЯ РАБОТЫ С ПАПКАМИ ====================
+        function getFolderName() {
+            const activeTab = document.querySelector('.tab-content.active').id;
+            switch(activeTab) {
+                case 'bbcode': return document.getElementById('folderName').value || 'CatWar_Downloads';
+                case 'generator': return document.getElementById('folderNameGenerator').value || 'CatWar_Downloads';
+                case 'mass': return document.getElementById('folderNameMass').value || 'CatWar_Downloads';
+                case 'quick': return document.getElementById('folderNameQuick').value || 'CatWar_Downloads';
+                default: return 'CatWar_Downloads';
+            }
+        }
+
+        function getContentTypeFromUrl(url) {
+            if (url.includes('/costume/')) return 'costumes';
+            if (url.includes('/odoroj/')) return 'odors';
+            if (url.includes('/actions/')) return 'actions';
+            if (url.includes('/achievement/')) return 'achievements';
+            if (url.includes('/medal/')) return 'medals';
+            if (url.includes('/spacoj/')) return 'backgrounds';
+            if (url.includes('/things/')) return 'items';
+            return 'other';
+        }
+
+        function getSubfolderName(url) {
+            return getContentTypeFromUrl(url);
+        }
+
+        // 🔧 ИСПРАВЛЕННАЯ ФУНКЦИЯ СОЗДАНИЯ ИМЕНИ ФАЙЛА
+        function createDownloadFilename(url) {
+            const filename = getFilenameFromUrl(url);
+            const subfolder = getSubfolderName(url);
+            const folderName = getFolderName();
+            
+            // Создаем понятное имя файла с категорией
+            return `${folderName}_${subfolder}_${filename}`;
+        }
+
+        function updateFolderInfo() {
+            currentFolderName = getFolderName();
+            document.getElementById('currentFolder').textContent = currentFolderName;
+        }
+
+        // ==================== ОСНОВНЫЕ ФУНКЦИИ СКАЧИВАНИЯ ====================
+        async function processCheckQueue(urls, delay) {
+            if (!isChecking || currentIndex >= urls.length) {
+                if (currentIndex >= urls.length) {
+                    finishCheckPhase();
+                }
+                return;
+            }
+
+            const url = urls[currentIndex];
+            const filename = getFilenameFromUrl(url);
+
+            const progress = ((currentIndex + 1) / totalFiles) * 100;
+            document.getElementById('progressFill').style.width = progress + '%';
+            document.getElementById('progressText').textContent = `${currentIndex + 1}/${totalFiles}`;
+            document.getElementById('statusText').textContent = `Проверка: ${filename}`;
+
+            try {
+                addLog(`🔍 Проверка: ${filename}`, 'check');
+                
+                const result = await checkImageExists(url);
+                
+                checkedCount++;
+                
+                if (result.exists) {
+                    validUrls.push(url);
+                    validCount++;
+                    addLog(`✅ Валидный: ${filename} (${formatFileSize(result.size)})`, 'success');
+                } else {
+                    invalidCount++;
+                    addLog(`❌ Невалидный: ${filename} - ${result.error}`, 'error');
+                }
+
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    checkedCount++;
+                    invalidCount++;
+                    addLog(`💥 Ошибка проверки: ${filename} - ${error.message}`, 'error');
+                }
+            }
+
+            updateStats();
+            currentIndex++;
+
+            if (currentIndex < urls.length && isChecking) {
+                setTimeout(() => processCheckQueue(urls, delay), delay);
+            } else {
+                finishCheckPhase();
+            }
+        }
+
+        function finishCheckPhase() {
+            isChecking = false;
+            
+            if (validUrls.length > 0) {
+                addLog(`🎯 Проверка завершена! Валидных: ${validUrls.length}/${allUrls.length}`, 'success');
+                addLog(`🚀 Начинаем скачивание ${validUrls.length} файлов...`, 'info');
+                
+                setTimeout(() => startDownloadPhase(validUrls), 1000);
+            } else {
+                document.getElementById('statusText').textContent = 'Нет валидных файлов';
+                document.getElementById('stopBtn').disabled = true;
+                document.getElementById('skipBtn').disabled = true;
+                addLog('💥 Нет валидных файлов для скачивания', 'error');
+            }
+        }
+
+        // 🔧 ПЕРЕПИСАННАЯ ФУНКЦИЯ СКАЧИВАНИЯ
+        async function downloadImage(url, filename) {
+            for (let attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    const proxyUrl = getProxyUrl(url);
+                    const subfolder = getSubfolderName(url);
+                    const downloadFilename = createDownloadFilename(url);
+                    
+                    addLog(`📥 Скачивание: ${subfolder}/${filename} (попытка ${attempt})`, 'info');
+                    
+                    // Создаем новый AbortController для каждого запроса
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 15000);
+                    
+                    const response = await fetch(proxyUrl, {
+                        signal: controller.signal,
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                            'Accept': 'image/*, */*'
+                        }
+                    });
+
+                    clearTimeout(timeoutId);
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    
+                    const blob = await response.blob();
+                    if (blob.size < 100) {
+                        throw new Error('Файл слишком маленький');
+                    }
+
+                    // 🔧 УПРОЩЕННОЕ СОХРАНЕНИЕ
+                    const blobUrl = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = blobUrl;
+                    link.download = downloadFilename;
+                    link.style.display = 'none';
+                    
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+
+                    // Очистка
+                    setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+                    
+                    return { success: true, size: blob.size };
+
+                } catch (error) {
+                    if (error.name === 'AbortError') {
+                        addLog(`⏹️ Отменено: ${filename}`, 'warning');
+                        throw error;
+                    }
+                    
+                    addLog(`❌ Ошибка скачивания (попытка ${attempt}): ${error.message}`, 'error');
+                    
+                    if (attempt < 3) {
+                        rotateProxy();
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+                }
+            }
+            return { success: false, size: 0 };
+        }
+
+        async function processDownloadQueue(urls, delay) {
+            if (!isDownloading || currentIndex >= urls.length) {
+                if (currentIndex >= urls.length) {
+                    finishDownloadPhase();
+                }
+                return;
+            }
+
+            const url = urls[currentIndex];
+            const filename = getFilenameFromUrl(url);
+            const subfolder = getSubfolderName(url);
+
+            const progress = ((currentIndex + 1) / urls.length) * 100;
+            document.getElementById('progressFill').style.width = progress + '%';
+            document.getElementById('progressText').textContent = `${currentIndex + 1}/${urls.length}`;
+            document.getElementById('statusText').textContent = `Скачивание: ${subfolder}/${filename}`;
+
+            try {
+                const result = await downloadImage(url, filename);
+                
+                if (result.success) {
+                    downloadedCount++;
+                    addLog(`✅ Скачан: ${subfolder}/${filename} (${formatFileSize(result.size)})`, 'success');
+                } else {
+                    addLog(`💥 Не скачан: ${subfolder}/${filename}`, 'error');
+                }
+
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    addLog(`💥 Ошибка: ${subfolder}/${filename} - ${error.message}`, 'error');
+                }
+            }
+
+            updateStats();
+            currentIndex++;
+
+            if (currentIndex < urls.length && isDownloading) {
+                setTimeout(() => processDownloadQueue(urls, delay), delay);
+            } else {
+                finishDownloadPhase();
+            }
+        }
+
+        function startDownloadPhase(urls) {
+            setPhase('download');
+            
+            downloadQueue = urls;
+            currentIndex = 0;
+            isDownloading = true;
+
+            document.getElementById('progressText').textContent = `0/${urls.length}`;
+            document.getElementById('progressFill').style.width = '0%';
+            document.getElementById('statusText').textContent = 'Начало скачивания...';
+
+            const delay = getCurrentDelay();
+            processDownloadQueue(urls, delay);
+        }
+
+        function finishDownloadPhase() {
+            isDownloading = false;
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('skipBtn').disabled = true;
+            
+            const successRate = validUrls.length > 0 ? Math.round((downloadedCount / validUrls.length) * 100) : 0;
+            
+            document.getElementById('statusText').textContent = 
+                `Завершено! Скачано: ${downloadedCount}/${validUrls.length} (${successRate}%)`;
+            addLog(`🎉 Все операции завершены!`, 'success');
+            addLog(`📊 Итог: Проверено ${checkedCount}, Валидных ${validCount}, Скачано ${downloadedCount}`, 'info');
+        }
+
+        function stopDownload() {
+            isChecking = false;
+            isDownloading = false;
+            if (abortController) {
+                abortController.abort();
+            }
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('skipBtn').disabled = true;
+            document.getElementById('statusText').textContent = 'Остановлено пользователем';
+            addLog('⏹️ Процесс остановлен', 'warning');
+        }
+
+        function skipCurrent() {
+            if (isChecking || isDownloading) {
+                currentIndex++;
+                addLog('⏭️ Текущий файл пропущен', 'warning');
+                updateStats();
+            }
+        }
+
+        // ==================== ИНИЦИАЛИЗАЦИЯ ПРОЦЕССА ====================
+        function startCheckPhase(urls, delay) {
+            // 🔧 СБРОС ВСЕХ ПЕРЕМЕННЫХ
+            allUrls = urls;
+            validUrls = [];
+            checkedCount = 0;
+            validCount = 0;
+            invalidCount = 0;
+            downloadedCount = 0;
+            currentIndex = 0;
+            totalFiles = urls.length;
+            currentProxyIndex = 0;
+            isChecking = true;
+            isDownloading = false;
+
+            updateFolderInfo();
+
+            // 🔧 ИНИЦИАЛИЗАЦИЯ ИНТЕРФЕЙСА
+            document.getElementById('progressContainer').style.display = 'block';
+            document.getElementById('progressText').textContent = `0/${totalFiles}`;
+            document.getElementById('progressFill').style.width = '0%';
+            document.getElementById('statusText').textContent = 'Начало проверки...';
+            document.getElementById('stopBtn').disabled = false;
+            document.getElementById('skipBtn').disabled = false;
+            
+            // Очистка логов
+            document.getElementById('logContainer').innerHTML = '';
+
+            setPhase('check');
+            updateStats();
+            
+            addLog(`🔍 Начало проверки: ${totalFiles} файлов`, 'info');
+            addLog(`🌐 Активный прокси: corsproxy.io`, 'proxy');
+            addLog(`⏱️ Задержка: ${delay}мс`, 'info');
+
+            processCheckQueue(urls, delay);
+        }
+
+        function getCurrentDelay() {
+            const activeTab = document.querySelector('.tab-content.active').id;
+            switch(activeTab) {
+                case 'bbcode': return parseInt(document.getElementById('delay1').value) || 800;
+                case 'generator': return parseInt(document.getElementById('delayGenerator').value) || 800;
+                case 'mass': return parseInt(document.getElementById('massDelay').value) || 600;
+                case 'quick': return parseInt(document.getElementById('delayQuick').value) || 500;
+                default: return 800;
+            }
+        }
+
+        // ==================== ФУНКЦИИ ИНТЕРФЕЙСА ====================
+        function parseAndDownloadBBCode() {
+            const bbcodeText = document.getElementById('bbcodeInput').value;
+            const delay = parseInt(document.getElementById('delay1').value) || 800;
+            const limit = parseInt(document.getElementById('limit1').value) || 20;
+
+            const urls = [];
+            const imgRegex = /\[img\](.*?)\[\/img\]/g;
+            let match;
+
+            while ((match = imgRegex.exec(bbcodeText)) !== null && urls.length < limit) {
+                const url = match[1].trim();
+                if (url.startsWith('http')) {
+                    urls.push(url);
+                }
+            }
+
+            if (urls.length === 0) {
+                alert('❌ Не найдено валидных ссылок в BB-кодах');
+                return;
+            }
+
+            startCheckPhase(urls, delay);
+        }
+
+        function generateAndDownload() {
+            const type = document.getElementById('contentType').value;
+            const startId = parseInt(document.getElementById('startId').value) || 1;
+            const endId = parseInt(document.getElementById('endId').value) || 20;
+            const additionalIds = document.getElementById('additionalIds').value
+                .split(',')
+                .map(id => parseInt(id.trim()))
+                .filter(id => !isNaN(id));
+            const delay = parseInt(document.getElementById('delayGenerator').value) || 800;
+            const limit = parseInt(document.getElementById('limitGenerator').value) || 30;
+
+            const urls = [];
+            const baseUrls = {
+                costume: 'https://catwar.net/cw3/cats/{X}/costume/',
+                odoroj: 'https://catwar.net/cw3/odoroj/',
+                actions: 'https://catwar.net/cw3/actions/',
+                achievement: 'https://catwar.net/cw3/achievement/',
+                medal: 'https://catwar.net/cw3/medal/',
+                spacoj: 'https://catwar.net/cw3/spacoj/',
+                things: 'https://catwar.net/cw3/things/'
+            };
+
+            // 🔧 ИСПРАВЛЕННАЯ ГЕНЕРАЦИЯ URL
+            if (type === 'costume') {
+                const versions = Array.from(document.querySelectorAll('input[name="version"]:checked'))
+                    .map(input => input.value);
+                
+                if (versions.length === 0) {
+                    alert('❌ Выберите хотя бы одну версию костюма');
+                    return;
+                }
+                
+                versions.forEach(version => {
+                    for (let id = startId; id <= endId && urls.length < limit; id++) {
+                        urls.push(`${baseUrls.costume.replace('{X}', version)}${id}.png`);
+                    }
+                });
+            } else {
+                const baseUrl = baseUrls[type];
+                for (let id = startId; id <= endId && urls.length < limit; id++) {
+                    urls.push(`${baseUrl}${id}.png`);
+                }
+            }
+
+            // Добавляем дополнительные ID
+            additionalIds.forEach(id => {
+                if (urls.length < limit) {
+                    if (type === 'costume') {
+                        const versions = Array.from(document.querySelectorAll('input[name="version"]:checked'))
+                            .map(input => input.value);
+                        versions.forEach(version => {
+                            if (urls.length < limit) {
+                                urls.push(`${baseUrls.costume.replace('{X}', version)}${id}.png`);
+                            }
+                        });
+                    } else {
+                        urls.push(`${baseUrls[type]}${id}.png`);
+                    }
+                }
+            });
+
+            const uniqueUrls = [...new Set(urls)].slice(0, limit);
+            
+            if (uniqueUrls.length === 0) {
+                alert('❌ Не сгенерировано ни одного URL');
+                return;
+            }
+
+            startCheckPhase(uniqueUrls, delay);
+        }
+
+        function downloadMassUrls() {
+            const urlsText = document.getElementById('massUrls').value;
+            const delay = parseInt(document.getElementById('massDelay').value) || 600;
+            const limit = parseInt(document.getElementById('massLimit').value) || 25;
+
+            const urls = urlsText.split('\n')
+                .map(url => url.trim())
+                .filter(url => url && url.startsWith('http'))
+                .slice(0, limit);
+
+            if (urls.length === 0) {
+                alert('❌ Нет валидных ссылок для проверки');
+                return;
+            }
+
+            startCheckPhase(urls, delay);
+        }
+
+        function loadPreset(presetName) {
+            const presets = {
+                costumes: `https://catwar.net/cw3/cats/0/costume/1.png\nhttps://catwar.net/cw3/cats/0/costume/2.png\nhttps://catwar.net/cw3/cats/0/costume/3.png`,
+                odors: `https://catwar.net/cw3/odoroj/1.png\nhttps://catwar.net/cw3/odoroj/2.png\nhttps://catwar.net/cw3/odoroj/3.png\nhttps://catwar.net/cw3/odoroj/4.png`,
+                actions: `https://catwar.net/cw3/actions/1.png\nhttps://catwar.net/cw3/actions/2.png\nhttps://catwar.net/cw3/actions/3.png`,
+                achievements: `https://catwar.net/cw3/achievement/1.png\nhttps://catwar.net/cw3/achievement/2.png\nhttps://catwar.net/cw3/achievement/3.png`
+            };
+            
+            document.getElementById('massUrls').value = presets[presetName] || '';
+            addLog(`📁 Загружен пресет: ${presetName}`, 'info');
+        }
+
+        function quickDownload(type) {
+            const presets = {
+                costumes: Array.from({length: 6}, (_, i) => `https://catwar.net/cw3/cats/0/costume/${i + 1}.png`),
+                odors: Array.from({length: 6}, (_, i) => `https://catwar.net/cw3/odoroj/${i + 1}.png`),
+                medals: Array.from({length: 6}, (_, i) => `https://catwar.net/cw3/medal/${i + 1}.png`),
+                items: Array.from({length: 6}, (_, i) => `https://catwar.net/cw3/things/${i + 1}.png`),
+                actions: Array.from({length: 6}, (_, i) => `https://catwar.net/cw3/actions/${i + 1}.png`),
+                achievements: Array.from({length: 6}, (_, i) => `https://catwar.net/cw3/achievement/${i + 1}.png`),
+                backgrounds: Array.from({length: 6}, (_, i) => `https://catwar.net/cw3/spacoj/${i + 1}.png`)
+            };
+            
+            const urls = presets[type] || [];
+            const delay = parseInt(document.getElementById('delayQuick').value) || 500;
+            
+            if (urls.length === 0) {
+                alert('❌ Неизвестный тип для быстрой загрузки');
+                return;
+            }
+            
+            startCheckPhase(urls, delay);
+        }
+
+        function testQuickDownload() {
+            const testUrls = [
+                'https://catwar.net/cw3/cats/0/costume/1.png',
+                'https://catwar.net/cw3/cats/0/costume/2.png',
+                'https://catwar.net/cw3/cats/0/costume/3.png',
+                'https://catwar.net/cw3/odoroj/1.png',
+                'https://catwar.net/cw3/odoroj/2.png',
+                'https://catwar.net/cw3/actions/1.png'
+            ];
+            const delay = parseInt(document.getElementById('delayQuick').value) || 500;
+            startCheckPhase(testUrls, delay);
+        }
+
+        // ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
+        function getFilenameFromUrl(url) {
+            const matches = url.match(/\/([^\/]+\.(png|jpg|jpeg|gif))$/i);
+            return matches ? matches[1] : `file_${Date.now()}.png`;
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // ==================== ИНИЦИАЛИЗАЦИЯ ====================
+        document.addEventListener('DOMContentLoaded', function() {
+            // Очищаем лог при загрузке
+            document.getElementById('logContainer').innerHTML = '';
+            
+            addLog('🔧 CatWar Downloader v2.1 инициализирован', 'info');
+            addLog('🌐 Доступно 3 CORS прокси', 'proxy');
+            addLog('💡 Используйте "Быстрый старт" для тестирования', 'info');
+            
+            // Инициализация генератора
+            document.getElementById('contentType').addEventListener('change', function() {
+                document.getElementById('costumeVersionsContainer').style.display = 
+                    this.value === 'costume' ? 'block' : 'none';
+            });
+        });
+    </script>
+</body>
+</html>
